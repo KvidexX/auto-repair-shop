@@ -195,11 +195,11 @@ class AppointmentDialog(QDialog):
 
 
 class AppointmentsPage(QWidget):
-    def __init__(self, clients, cars, parent=None):
+    def __init__(self, clients, cars, parent=None, *, demo=True):
         super().__init__(parent)
         self.clients, self.cars = clients, cars
-        self.appointments = make_appointments(local_now().date())
-        self.next_id = max(a["id"] for a in self.appointments) + 1
+        self.appointments = make_appointments(local_now().date()) if demo else []
+        self.next_id = max((a["id"] for a in self.appointments), default=0) + 1
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 28, 32, 20)
         layout.setSpacing(0)

@@ -343,11 +343,11 @@ class OrderCard(QDialog):
 class OrdersPage(QWidget):
     orders_changed = Signal()
 
-    def __init__(self, clients, cars, services, parent=None):
+    def __init__(self, clients, cars, services, parent=None, *, demo=True):
         super().__init__(parent)
         self.clients, self.cars, self.services = clients, cars, services
-        self.orders = make_orders(clients, cars, services, local_now().date())
-        self.next_id = max(o["id"] for o in self.orders) + 1
+        self.orders = make_orders(clients, cars, services, local_now().date()) if demo else []
+        self.next_id = max((o["id"] for o in self.orders), default=0) + 1
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 28, 32, 20)
         layout.setSpacing(0)

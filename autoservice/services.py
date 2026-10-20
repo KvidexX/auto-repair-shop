@@ -1,4 +1,4 @@
-"""Каталог услуг и его форма. Только данные текущего сеанса, цены в целых рублях."""
+"""Каталог услуг и его форма. Подключаемое хранение, цены в целых рублях."""
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIntValidator
@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from .persistence import save_reference_change
 from .data import CATEGORIES, SERVICES, normalize_service_name
 from .ui import OwnerComboBox, RowSelectionDelegate, icon
 
@@ -129,9 +130,10 @@ class ServiceDialog(QDialog):
 
 
 class ServicesPage(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, database=None):
         super().__init__(parent)
-        self.services = [dict(service) for service in SERVICES]
+        self.database = database
+        self.services = database.list_services() if database is not None else [dict(service) for service in SERVICES]
         self.next_id = max((s["id"] for s in self.services), default=0) + 1
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 28, 32, 20)
@@ -273,17 +275,28 @@ class ServicesPage(QWidget):
                 self.table.selectRow(row)
         self.table.blockSignals(False)
         self.total.setText(str(len(self.services)))
-        self.footer.setText(f"Найдено: {len(visible)} из {len(self.services)}  ·  Изменения хранятся только до закрытия приложения")
+        storage_note = "Изменения сохранены в SQLite" if self.database is not None else "Изменения хранятся только до закрытия приложения"
+        self.footer.setText(f"Найдено: {len(visible)} из {len(self.services)}  ·  {storage_note}")
         self.empty.setVisible(not visible)
         self.table.setVisible(bool(visible))
         self.update_actions()
 
+    def save_service(self, operation):
+        return save_reference_change(self, self.database, operation, [
+            (self.services, self.database.list_services),
+        ])
+
     def add_service(self):
         dialog = ServiceDialog(self.services, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            service = {"id": self.next_id, **dialog.values()}
-            self.services.append(service)
-            self.next_id += 1
+            if self.database is not None:
+                saved, service = self.save_service(lambda: self.database.add_service(**dialog.values()))
+                if not saved:
+                    return
+            else:
+                service = {"id": self.next_id, **dialog.values()}
+                self.services.append(service)
+                self.next_id += 1
             self.search.clear()
             self.refresh(service["id"])
             self.table.scrollToItem(self.table.item(len(self.services) - 1, 0))
@@ -294,7 +307,12 @@ class ServicesPage(QWidget):
             return
         dialog = ServiceDialog(self.services, self, service)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            service.update(dialog.values())
+            if self.database is not None:
+                saved, _ = self.save_service(lambda: self.database.update_service(service["id"], **dialog.values()))
+                if not saved:
+                    return
+            else:
+                service.update(dialog.values())
             self.refresh(service["id"])
 
     def delete_service(self):
@@ -312,5 +330,10 @@ class ServicesPage(QWidget):
         question.setEscapeButton(cancel)
         question.exec()
         if question.clickedButton() == confirm:
-            self.services.remove(service)
+            if self.database is not None:
+                saved, _ = self.save_service(lambda: self.database.delete_service(service["id"]))
+                if not saved:
+                    return
+            else:
+                self.services.remove(service)
             self.refresh()

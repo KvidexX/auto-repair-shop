@@ -1,4 +1,4 @@
-"""SQLite-хранилище. Не импортируется и не используется графическими экранами."""
+"""SQLite-хранилище. Используется справочниками при явной передаче зависимости."""
 
 from contextlib import contextmanager
 from datetime import date, datetime, time

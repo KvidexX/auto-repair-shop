@@ -1,4 +1,4 @@
-"""Графический прототип «АвтоСервис». Данные хранятся только в памяти."""
+"""Графический прототип «АвтоСервис». Демонстрационный запуск и подключаемые SQLite-справочники."""
 
 import argparse
 import sys
@@ -21,6 +21,7 @@ from autoservice.services import ServicesPage, ServiceDialog
 from autoservice.appointments import AppointmentsPage, AppointmentDialog, PLANNED
 from autoservice.orders import OrdersPage, OrderDialog, OrderCard
 from autoservice.history import HistoryPage
+from autoservice.persistence import save_reference_change
 
 
 class ClientDialog(QDialog):
@@ -230,12 +231,13 @@ class CarDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, database=None):
         super().__init__()
-        self.clients = [dict(client) for client in CLIENTS]
-        self.cars = [dict(car) for car in CARS]
-        self.next_car_id = max(car["id"] for car in self.cars) + 1
-        self.next_client_id = max(client["id"] for client in self.clients) + 1
+        self.database = database
+        self.clients = database.list_clients() if database is not None else [dict(client) for client in CLIENTS]
+        self.cars = database.list_cars() if database is not None else [dict(car) for car in CARS]
+        self.next_car_id = max((car["id"] for car in self.cars), default=0) + 1
+        self.next_client_id = max((client["id"] for client in self.clients), default=0) + 1
         self.nav_buttons = {}
         self.setWindowTitle("АвтоСервис — Заказ-наряды")
         self.resize(1280, 720)
@@ -257,18 +259,18 @@ class MainWindow(QMainWindow):
         header_layout.setContentsMargins(32, 0, 32, 0)
         header_layout.addWidget(QLabel("Рабочее место мастера-приёмщика"))
         header_layout.addStretch()
-        demo = QLabel("ДЕМОНСТРАЦИОННЫЕ ДАННЫЕ")
+        demo = QLabel("СПРАВОЧНИКИ SQLITE" if database is not None else "ДЕМОНСТРАЦИОННЫЕ ДАННЫЕ")
         demo.setObjectName("demo")
         header_layout.addWidget(demo)
         right_layout.addWidget(header)
         self.pages = QStackedWidget()
-        self.services_page = ServicesPage()
-        self.orders_page = OrdersPage(self.clients, self.cars, self.services_page.services)
+        self.services_page = ServicesPage(database=database)
+        self.orders_page = OrdersPage(self.clients, self.cars, self.services_page.services, demo=database is None)
         self.pages.addWidget(self.orders_page)
         self.pages.addWidget(self.build_clients())
         self.pages.addWidget(self.build_cars())
         self.pages.addWidget(self.services_page)
-        self.appointments_page = AppointmentsPage(self.clients, self.cars)
+        self.appointments_page = AppointmentsPage(self.clients, self.cars, demo=database is None)
         self.pages.addWidget(self.appointments_page)
         self.history_page = HistoryPage(self.orders_page.orders)
         self.pages.addWidget(self.history_page)
@@ -482,7 +484,7 @@ class MainWindow(QMainWindow):
                 table.selectRow(row)
         table.blockSignals(False)
         self.client_count.setText(str(len(self.clients)))
-        self.clients_footer.setText(f"Показано: {len(visible)} из {len(self.clients)}  ·  Изменения хранятся только до закрытия приложения")
+        self.clients_footer.setText(f"Показано: {len(visible)} из {len(self.clients)}  ·  {self.storage_note}")
         self.empty_clients.setVisible(not visible)
         table.setVisible(bool(visible))
         self.update_client_actions()
@@ -490,9 +492,14 @@ class MainWindow(QMainWindow):
     def add_client(self):
         dialog = ClientDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            client = {"id": self.next_client_id, **dialog.values()}
-            self.clients.append(client)
-            self.next_client_id += 1
+            if self.database is not None:
+                saved, client = self.save_references(lambda: self.database.add_client(**dialog.values()))
+                if not saved:
+                    return
+            else:
+                client = {"id": self.next_client_id, **dialog.values()}
+                self.clients.append(client)
+                self.next_client_id += 1
             self.client_search.clear()
             self.refresh_clients(client["id"])
             self.client_table.scrollToItem(self.client_table.item(len(self.clients) - 1, 0))
@@ -503,7 +510,12 @@ class MainWindow(QMainWindow):
             return
         dialog = ClientDialog(self, client)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            client.update(dialog.values())
+            if self.database is not None:
+                saved, _ = self.save_references(lambda: self.database.update_client(client["id"], **dialog.values()))
+                if not saved:
+                    return
+            else:
+                client.update(dialog.values())
             self.refresh_clients(client["id"])
             self.refresh_cars()
             self.appointments_page.refresh()
@@ -534,15 +546,32 @@ class MainWindow(QMainWindow):
         question.setWindowTitle("Удалить клиента")
         question.setIcon(QMessageBox.Icon.Question)
         question.setTextFormat(Qt.TextFormat.PlainText)
-        question.setText(f"Удалить клиента «{client['name']}» из демонстрационного списка?")
+        question.setText(f"Удалить клиента «{client['name']}»?" if self.database is not None else
+                         f"Удалить клиента «{client['name']}» из демонстрационного списка?")
         confirm = question.addButton("Удалить", QMessageBox.ButtonRole.DestructiveRole)
         cancel = question.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
         question.setDefaultButton(cancel)
         question.setEscapeButton(cancel)
         question.exec()
         if question.clickedButton() == confirm:
-            self.clients.remove(client)
+            if self.database is not None:
+                saved, _ = self.save_references(lambda: self.database.delete_client(client["id"]))
+                if not saved:
+                    return
+                self.refresh_cars()
+            else:
+                self.clients.remove(client)
             self.refresh_clients()
+
+    def save_references(self, operation):
+        return save_reference_change(self, self.database, operation, [
+            (self.clients, self.database.list_clients),
+            (self.cars, self.database.list_cars),
+        ])
+
+    @property
+    def storage_note(self):
+        return "Изменения сохранены в SQLite" if self.database is not None else "Изменения хранятся только до закрытия приложения"
 
     def car_count(self, client_id):
         return sum(car["owner_id"] == client_id for car in self.cars)
@@ -696,7 +725,7 @@ class MainWindow(QMainWindow):
                 table.selectRow(row)
         table.blockSignals(False)
         self.car_total.setText(str(len(self.cars)))
-        self.cars_footer.setText(f"Найдено: {len(visible)} из {len(self.cars)}  ·  Изменения хранятся только до закрытия приложения")
+        self.cars_footer.setText(f"Найдено: {len(visible)} из {len(self.cars)}  ·  {self.storage_note}")
         self.empty_cars.setVisible(not visible)
         table.setVisible(bool(visible))
         self.update_car_actions()
@@ -704,9 +733,14 @@ class MainWindow(QMainWindow):
     def add_car(self):
         dialog = CarDialog(self.clients, self.cars, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            car = {"id": self.next_car_id, **dialog.values()}
-            self.cars.append(car)
-            self.next_car_id += 1
+            if self.database is not None:
+                saved, car = self.save_references(lambda: self.database.add_car(**dialog.values()))
+                if not saved:
+                    return
+            else:
+                car = {"id": self.next_car_id, **dialog.values()}
+                self.cars.append(car)
+                self.next_car_id += 1
             self.car_search.clear()
             self.refresh_cars(car["id"])
             self.refresh_clients()
@@ -718,7 +752,12 @@ class MainWindow(QMainWindow):
             return
         dialog = CarDialog(self.clients, self.cars, self, car)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            car.update(dialog.values())
+            if self.database is not None:
+                saved, _ = self.save_references(lambda: self.database.update_car(car["id"], **dialog.values()))
+                if not saved:
+                    return
+            else:
+                car.update(dialog.values())
             self.refresh_cars(car["id"])
             self.refresh_clients()
             self.appointments_page.refresh()
@@ -758,7 +797,13 @@ class MainWindow(QMainWindow):
         question.setEscapeButton(cancel)
         question.exec()
         if question.clickedButton() == confirm:
-            self.cars.remove(car)
+            if self.database is not None:
+                saved, _ = self.save_references(lambda: self.database.delete_car(car["id"]))
+                if not saved:
+                    return
+                self.appointments_page.refresh()
+            else:
+                self.cars.remove(car)
             self.refresh_cars()
             self.refresh_clients()
 
