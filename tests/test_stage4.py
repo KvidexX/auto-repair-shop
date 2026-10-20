@@ -9,9 +9,9 @@ from PySide6.QtGui import QFont
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QTableWidget
 
-from data import SERVICES
+from autoservice.data import SERVICES
 from main import MainWindow, STYLE
-from services import ServiceDialog
+from autoservice.services import ServiceDialog
 
 
 class ServicesTests(unittest.TestCase):
@@ -174,7 +174,7 @@ class ServicesTests(unittest.TestCase):
         w.show_section("clients")
         w.show_section("services")
         self.assertEqual(p.selected_service()["id"], 2)
-        output = Path(__file__).resolve().parent / "screenshots"
+        output = Path(__file__).resolve().parents[1] / "screenshots"
         output.mkdir(exist_ok=True)
         self.assertTrue(w.grab().save(str(output / "services.png"), "PNG"))
         dialog = ServiceDialog(p.services, w)

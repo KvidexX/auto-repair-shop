@@ -8,11 +8,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QTableWidget, QMessageBox
 
-import test_stage4 as helpers
+from tests import test_stage4 as helpers
 from main import MainWindow
-from orders import OrderDialog, OrderCard, number, money
-from data import ORDER_STATUSES, create_order, advance_order
-from appointments import local_now
+from autoservice.orders import OrderDialog, OrderCard, number, money
+from autoservice.data import ORDER_STATUSES, create_order, advance_order
+from autoservice.appointments import local_now
 
 
 class OrdersTests(unittest.TestCase):
@@ -301,7 +301,7 @@ class OrdersTests(unittest.TestCase):
         p.search.clear()
         self.choose(p.table, 27)
         QTest.qWait(30)
-        output = Path(__file__).resolve().parent / "screenshots"
+        output = Path(__file__).resolve().parents[1] / "screenshots"
         self.assertTrue(w.grab().save(str(output / "orders.png"), "PNG"))
         self.assertTrue(w.grab().save(str(output / "screenshot.png"), "PNG"))
         d = OrderDialog(p.clients, p.cars, p.services, w)

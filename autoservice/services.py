@@ -8,8 +8,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from data import CATEGORIES, SERVICES, normalize_service_name
-from ui import OwnerComboBox, RowSelectionDelegate, icon
+from .data import CATEGORIES, SERVICES, normalize_service_name
+from .ui import OwnerComboBox, RowSelectionDelegate, icon
 
 
 class ServiceDialog(QDialog):

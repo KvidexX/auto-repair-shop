@@ -10,8 +10,8 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget, QStyle,
 )
 
-from data import make_appointments, local_now
-from ui import DateEdit, OwnerComboBox, RowSelectionDelegate, icon
+from .data import make_appointments, local_now
+from .ui import DateEdit, OwnerComboBox, RowSelectionDelegate, icon
 
 PLANNED = "Запланирована"
 CANCELLED = "Отменена"

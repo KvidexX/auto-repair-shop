@@ -10,9 +10,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDialog, QMessageBox
 
-from appointments import AppointmentDialog, PLANNED, CANCELLED, SLOTS, local_now, qt_date
+from autoservice.appointments import AppointmentDialog, PLANNED, CANCELLED, SLOTS, local_now, qt_date
 from main import ClientDialog, CarDialog
-import test_stage4 as helpers
+from tests import test_stage4 as helpers
 
 
 # Переиспользуем только тестовые помощники, а не сценарии прошлых этапов.
@@ -86,7 +86,7 @@ class AppointmentsTests(unittest.TestCase):
         p = self.setup_page()
         now = local_now().replace(hour=12, minute=15, second=0, microsecond=0)
         dialog = AppointmentDialog(self.window.clients, self.window.cars, p.appointments, self.window)
-        with patch("appointments.local_now", return_value=now):
+        with patch("autoservice.appointments.local_now", return_value=now):
             self.fill(dialog, day=now.date(), slot=time(12, 0))
             dialog.save_button.click()
             self.assertIn("прошедшие", dialog.error.text())
@@ -196,7 +196,7 @@ class AppointmentsTests(unittest.TestCase):
         self.assertEqual(p.selected_appointment()["id"], 2)
         self.assertEqual(self.window.nav_buttons["calendar"].objectName(), "activeNav")
         self.assertTrue(self.window.nav_buttons["history"].isEnabled())
-        output = Path(__file__).resolve().parent / "screenshots"
+        output = Path(__file__).resolve().parents[1] / "screenshots"
         self.assertTrue(self.window.grab().save(str(output / "appointments.png"), "PNG"))
         dialog = AppointmentDialog(self.window.clients, self.window.cars, p.appointments, self.window)
         dialog.show()

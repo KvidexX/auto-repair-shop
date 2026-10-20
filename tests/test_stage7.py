@@ -10,9 +10,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QTableWidget
 
-import test_stage6 as helpers
-from data import LOCAL_TIMEZONE, advance_order, local_now
-from orders import OrderCard, number
+from tests import test_stage6 as helpers
+from autoservice.data import LOCAL_TIMEZONE, advance_order, local_now
+from autoservice.orders import OrderCard, number
 
 
 class HistoryTests(unittest.TestCase):
@@ -59,7 +59,7 @@ class HistoryTests(unittest.TestCase):
             self.assertEqual(order["status"], "Готов к выдаче")
             self.assertIsNone(order["completed_at"])
             self.assertEqual(h.table.rowCount(), 2)
-            with patch("data.local_now", return_value=now):
+            with patch("autoservice.data.local_now", return_value=now):
                 card.next_button.click()
             self.assertEqual(order["completed_at"], now.replace(tzinfo=LOCAL_TIMEZONE))
             self.assertEqual(h.table.rowCount(), 3)  # Обновление по сигналу ещё до закрытия карточки.
@@ -75,7 +75,7 @@ class HistoryTests(unittest.TestCase):
         self.choose(h.table, order["id"])
         def inspect(card):
             self.assertFalse(card.next_button.isEnabled())
-            with patch("data.local_now", return_value=now + timedelta(days=10)):
+            with patch("autoservice.data.local_now", return_value=now + timedelta(days=10)):
                 card.next_stage()
                 self.assertFalse(advance_order(order))
             card.close_button.click()
@@ -205,7 +205,7 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(h.table.horizontalScrollBar().maximum(), 0)
         self.choose(h.table, 23)
         QTest.qWait(30)
-        output = Path(__file__).resolve().parent / "screenshots"
+        output = Path(__file__).resolve().parents[1] / "screenshots"
         self.assertTrue(w.grab().save(str(output / "history.png"), "PNG"))
         card = OrderCard(h.selected_order(), w)
         card.show()

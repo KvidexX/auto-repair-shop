@@ -7,9 +7,9 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from data import normalize_plate, normalize_service_name
-from orders import OrderCard, configure_table, money, number
-from ui import icon
+from .data import normalize_plate, normalize_service_name
+from .orders import OrderCard, configure_table, money, number
+from .ui import icon
 
 
 class HistoryPage(QWidget):

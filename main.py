@@ -15,12 +15,12 @@ from PySide6.QtWidgets import (
 )
 
 
-from data import CLIENTS, CARS, normalize_plate
-from ui import icon, RowSelectionDelegate, OwnerComboBox
-from services import ServicesPage, ServiceDialog
-from appointments import AppointmentsPage, AppointmentDialog, PLANNED
-from orders import OrdersPage, OrderDialog, OrderCard
-from history import HistoryPage
+from autoservice.data import CLIENTS, CARS, normalize_plate
+from autoservice.ui import icon, RowSelectionDelegate, OwnerComboBox
+from autoservice.services import ServicesPage, ServiceDialog
+from autoservice.appointments import AppointmentsPage, AppointmentDialog, PLANNED
+from autoservice.orders import OrdersPage, OrderDialog, OrderCard
+from autoservice.history import HistoryPage
 
 
 class ClientDialog(QDialog):

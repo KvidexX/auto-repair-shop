@@ -8,8 +8,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QStyle,
 )
 
-from data import ORDER_STATUSES, create_order, advance_order, make_orders, normalize_plate, local_now
-from ui import OwnerComboBox, RowSelectionDelegate, icon
+from .data import ORDER_STATUSES, create_order, advance_order, make_orders, normalize_plate, local_now
+from .ui import OwnerComboBox, RowSelectionDelegate, icon
 
 STATUS_COLORS = {
     "Оформлен": ("#EEF2F6", "#526278"), "В работе": ("#EAF1FE", "#3566B8"),
