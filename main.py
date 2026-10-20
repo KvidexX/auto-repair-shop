@@ -1,6 +1,7 @@
-"""Графический прототип «АвтоСервис». Демонстрационный запуск и подключаемые SQLite-справочники."""
+"""Графический прототип «АвтоСервис». SQLite-хранилище и демонстрационные скриншоты."""
 
 import argparse
+from contextlib import nullcontext
 import sys
 from datetime import date
 from pathlib import Path
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 
+from autoservice.database import Database
 from autoservice.data import CLIENTS, CARS, normalize_plate
 from autoservice.ui import icon, RowSelectionDelegate, OwnerComboBox
 from autoservice.services import ServicesPage, ServiceDialog
@@ -902,39 +904,54 @@ def main():
     app.setStyle("Fusion")
     app.setFont(QFont("Segoe UI", 10))
     app.setStyleSheet(STYLE)
-    window = MainWindow()
-    window.centralWidget().setObjectName("central")
-    window.show_section("orders" if args.order_card is not None else args.screen)
-    window.show()
-    dialog = None
-    if args.dialog:
-        if args.screen == "calendar":
-            dialog = AppointmentDialog(window.clients, window.cars, window.appointments_page.appointments, window)
-        elif args.screen == "services":
-            dialog = ServiceDialog(window.services_page.services, window)
-        elif args.screen == "car":
-            dialog = CarDialog(window.clients, window.cars, window)
-        elif args.screen == "orders":
-            dialog = OrderDialog(window.clients, window.cars, window.services_page.services, window)
-        else:
-            dialog = ClientDialog(window)
-        dialog.show()
-    elif args.order_card is not None:
-        order = next((o for o in window.orders_page.orders if o["id"] == args.order_card), None)
-        if order is None:
-            parser.error("Заказ с указанным ID не найден")
-        dialog = OrderCard(order, window)
-        dialog.show()
-    result = {"code": 0}
-    if args.screenshot:
-        def capture():
-            target = dialog if dialog else window
-            if not target.grab().save(str(args.screenshot), "PNG"):
-                print(f"Не удалось сохранить скриншот: {args.screenshot}", file=sys.stderr)
-                result["code"] = 1
-            app.quit()
-        QTimer.singleShot(900, capture)
-    return app.exec() or result["code"]
+    try:
+        # Снимки используют прежние данные в памяти, не открывая рабочую БД.
+        with (nullcontext() if args.screenshot else Database()) as database:
+            try:
+                window = MainWindow(database=database)
+                window.centralWidget().setObjectName("central")
+                window.show_section("orders" if args.order_card is not None else args.screen)
+                window.show()
+                dialog = None
+                if args.dialog:
+                    if args.screen == "calendar":
+                        dialog = AppointmentDialog(window.clients, window.cars, window.appointments_page.appointments, window)
+                    elif args.screen == "services":
+                        dialog = ServiceDialog(window.services_page.services, window)
+                    elif args.screen == "car":
+                        dialog = CarDialog(window.clients, window.cars, window)
+                    elif args.screen == "orders":
+                        dialog = OrderDialog(window.clients, window.cars, window.services_page.services, window)
+                    else:
+                        dialog = ClientDialog(window)
+                    dialog.show()
+                elif args.order_card is not None:
+                    order = next((o for o in window.orders_page.orders if o["id"] == args.order_card), None)
+                    if order is None:
+                        parser.error("Заказ с указанным ID не найден")
+                    dialog = OrderCard(order, window)
+                    dialog.show()
+                result = {"code": 0}
+                if args.screenshot:
+                    def capture():
+                        target = dialog if dialog else window
+                        if not target.grab().save(str(args.screenshot), "PNG"):
+                            print(f"Не удалось сохранить скриншот: {args.screenshot}", file=sys.stderr)
+                            result["code"] = 1
+                        app.quit()
+                    QTimer.singleShot(900, capture)
+                return app.exec() or result["code"]
+            finally:
+                app.closeAllWindows()
+    except Exception as error:
+        notice = QMessageBox(QMessageBox.Icon.Critical, "Ошибка запуска",
+                             "Не удалось запустить «АвтоСервис». Проверьте доступ к базе данных "
+                             "и сведения об ошибке.")
+        notice.setTextFormat(Qt.TextFormat.PlainText)
+        notice.setDetailedText(str(error))
+        notice.addButton("Закрыть", QMessageBox.ButtonRole.AcceptRole)
+        notice.exec()
+        return 1
 
 
 if __name__ == "__main__":
