@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMessageBox
 
 
-def save_reference_change(parent, database, operation, collections):
+def save_reference_change(parent, database, operation, collections, *, unique_message=None):
     """Меняет списки на месте только после успешного COMMIT всех операций.
 
     collections — пары (список интерфейса, функция загрузки из БД).
@@ -18,8 +18,11 @@ def save_reference_change(parent, database, operation, collections):
             snapshots = [load() for _, load in collections]
     except (sqlite3.Error, ValueError, KeyError) as error:
         if isinstance(error, sqlite3.IntegrityError):
-            message = ("Изменение не сохранено: запись связана с другими данными "
-                       "или нарушает ограничения уникальности и допустимых значений.")
+            if unique_message and getattr(error, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+                message = unique_message
+            else:
+                message = ("Изменение не сохранено: запись связана с другими данными "
+                           "или нарушает ограничения уникальности и допустимых значений.")
         elif isinstance(error, KeyError):
             message = "Изменение не сохранено: запись больше не существует в базе данных."
         elif isinstance(error, ValueError):

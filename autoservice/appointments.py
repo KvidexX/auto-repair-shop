@@ -1,4 +1,4 @@
-"""Планирование приёмки: общий получасовой поток, данные только в памяти."""
+"""Планирование приёмки: общий получасовой поток и подключаемая SQLite."""
 
 from datetime import datetime, timedelta, time
 
@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from .data import make_appointments, local_now
+from .persistence import save_reference_change
 from .ui import DateEdit, OwnerComboBox, RowSelectionDelegate, icon
 
 PLANNED = "Запланирована"
@@ -44,10 +45,12 @@ class AppointmentStatusDelegate(QStyledItemDelegate):
 
 
 class AppointmentDialog(QDialog):
-    def __init__(self, clients, cars, appointments, parent=None, appointment=None):
+    def __init__(self, clients, cars, appointments, parent=None, appointment=None, *, save_appointment=None):
         super().__init__(parent)
         self.clients, self.cars, self.appointments = clients, cars, appointments
         self.appointment = appointment
+        self.save_appointment = save_appointment
+        self.saved_appointment = None
         self.read_only = appointment is not None and appointment["status"] == CANCELLED
         self.setWindowTitle("Просмотр записи" if self.read_only else "Редактировать запись" if appointment else "Новая запись")
         self.setObjectName("appointmentDialog")
@@ -186,6 +189,11 @@ class AppointmentDialog(QDialog):
         if any(a["id"] != own_id and a["status"] == PLANNED and a["date"] == day.toPython() and a["time"] == slot for a in self.appointments):
             self.fail(self.time_input, "Это время уже занято. Выберите другой интервал.")
             return
+        if self.save_appointment is not None:
+            self.saved_appointment = self.save_appointment(self.values())
+            if self.saved_appointment is None:
+                self.fail(self.save_button, "Запись не сохранена. Введённые данные остались в форме — повторите попытку.")
+                return
         self.accept()
 
     def values(self):
@@ -195,11 +203,13 @@ class AppointmentDialog(QDialog):
 
 
 class AppointmentsPage(QWidget):
-    def __init__(self, clients, cars, parent=None, *, demo=True):
+    def __init__(self, clients, cars, parent=None, *, demo=True, database=None):
         super().__init__(parent)
         self.clients, self.cars = clients, cars
-        self.appointments = make_appointments(local_now().date()) if demo else []
-        self.next_id = max((a["id"] for a in self.appointments), default=0) + 1
+        self.database = database
+        self.appointments = (database.list_appointments() if database is not None else
+                             make_appointments(local_now().date()) if demo else [])
+        self.next_id = None if database is not None else max((a["id"] for a in self.appointments), default=0) + 1
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 28, 32, 20)
         layout.setSpacing(0)
@@ -360,17 +370,23 @@ class AppointmentsPage(QWidget):
                 self.table.selectRow(row)
         self.table.blockSignals(False)
         self.total.setText(str(len(self.appointments)))
-        self.footer.setText(f"Найдено: {len(visible)} из {len(self.appointments)}  ·  Изменения хранятся только до закрытия приложения")
+        storage_note = "Изменения сохранены в SQLite" if self.database is not None else "Изменения хранятся только до закрытия приложения"
+        self.footer.setText(f"Найдено: {len(visible)} из {len(self.appointments)}  ·  {storage_note}")
         self.empty.setVisible(not visible)
         self.table.setVisible(bool(visible))
         self.update_actions()
 
     def add_appointment(self):
         dialog = AppointmentDialog(self.clients, self.cars, self.appointments, self)
+        if self.database is not None:
+            dialog.save_appointment = lambda values: self.save_form(values, dialog)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            appointment = {"id": self.next_id, "status": PLANNED, **dialog.values()}
-            self.appointments.append(appointment)
-            self.next_id += 1
+            if self.database is not None:
+                appointment = dialog.saved_appointment
+            else:
+                appointment = {"id": self.next_id, "status": PLANNED, **dialog.values()}
+                self.appointments.append(appointment)
+                self.next_id += 1
             # Новая запись остаётся видимой даже при активном фильтре другой даты.
             self.date_filter.setDate(qt_date(appointment["date"]))
             self.refresh(appointment["id"])
@@ -386,12 +402,42 @@ class AppointmentsPage(QWidget):
         appointment = self.selected_appointment()
         if appointment is None:
             return
+        if self.database is not None:
+            appointment_id = appointment["id"]
+            appointment = self.save_record(lambda: self.database.get_appointment(appointment_id), self)
+            if appointment is None:
+                return
+            self.refresh(appointment_id)
         dialog = AppointmentDialog(self.clients, self.cars, self.appointments, self, appointment)
+        if self.database is not None and appointment["status"] == PLANNED:
+            dialog.save_appointment = lambda values: self.save_form(values, dialog, appointment["id"])
         if dialog.exec() == QDialog.DialogCode.Accepted and appointment["status"] == PLANNED:
-            appointment.update(dialog.values())
+            if self.database is not None:
+                appointment = dialog.saved_appointment
+            else:
+                appointment.update(dialog.values())
             self.date_filter.setDate(qt_date(appointment["date"]))
             self.refresh(appointment["id"])
             self.scroll_to_selection()
+
+    def save_record(self, operation, parent):
+        saved, appointment = save_reference_change(parent, self.database, operation, [
+            (self.appointments, self.database.list_appointments),
+        ], unique_message="Это время уже занято. Запись не сохранена — выберите другой интервал.")
+        return next(a for a in self.appointments if a["id"] == appointment["id"]) if saved else None
+
+    def save_form(self, values, dialog, appointment_id=None):
+        def operation():
+            # Повторяем проверку владельца по актуальным данным внутри транзакции.
+            car = self.database.get_car(values["car_id"])
+            if car["owner_id"] != dialog.client_input.currentData():
+                raise ValueError("Владелец автомобиля изменился. Проверьте выбранного клиента и автомобиль.")
+            fields = {"car_id": values["car_id"], "day": values["date"], "slot": values["time"],
+                      "reason": values["reason"], "note": values["note"]}
+            if appointment_id is None:
+                return self.database.add_appointment(**fields)
+            return self.database.update_appointment(appointment_id, **fields)
+        return self.save_record(operation, dialog)
 
     def scroll_to_selection(self):
         rows = self.table.selectionModel().selectedRows()
@@ -413,6 +459,11 @@ class AppointmentsPage(QWidget):
         question.setEscapeButton(cancel)
         question.exec()
         if question.clickedButton() == confirm:
-            appointment["status"] = CANCELLED
+            if self.database is not None:
+                appointment = self.save_record(lambda: self.database.cancel_appointment(appointment["id"]), self)
+                if appointment is None:
+                    return
+            else:
+                appointment["status"] = CANCELLED
             self.refresh(appointment["id"])
 

@@ -270,7 +270,7 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.build_clients())
         self.pages.addWidget(self.build_cars())
         self.pages.addWidget(self.services_page)
-        self.appointments_page = AppointmentsPage(self.clients, self.cars, demo=database is None)
+        self.appointments_page = AppointmentsPage(self.clients, self.cars, database=database, demo=database is None)
         self.pages.addWidget(self.appointments_page)
         self.history_page = HistoryPage(self.orders_page.orders)
         self.pages.addWidget(self.history_page)
