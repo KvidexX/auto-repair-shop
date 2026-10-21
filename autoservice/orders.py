@@ -519,8 +519,7 @@ class OrdersPage(QWidget):
                 self.table.selectRow(row)
         self.table.blockSignals(False)
         self.total.setText(str(len(self.orders)))
-        storage_note = "Изменения сохранены в SQLite" if self.database is not None else "Изменения хранятся только до закрытия приложения"
-        self.footer.setText(f"Найдено: {len(visible)} из {len(self.orders)}  ·  {storage_note}")
+        self.footer.setText(f"Найдено: {len(visible)} из {len(self.orders)}")
         self.empty.setVisible(not visible)
         self.table.setVisible(bool(visible))
         self.update_actions()

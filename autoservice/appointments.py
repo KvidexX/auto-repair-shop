@@ -370,8 +370,7 @@ class AppointmentsPage(QWidget):
                 self.table.selectRow(row)
         self.table.blockSignals(False)
         self.total.setText(str(len(self.appointments)))
-        storage_note = "Изменения сохранены в SQLite" if self.database is not None else "Изменения хранятся только до закрытия приложения"
-        self.footer.setText(f"Найдено: {len(visible)} из {len(self.appointments)}  ·  {storage_note}")
+        self.footer.setText(f"Найдено: {len(visible)} из {len(self.appointments)}")
         self.empty.setVisible(not visible)
         self.table.setVisible(bool(visible))
         self.update_actions()

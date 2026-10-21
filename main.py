@@ -254,17 +254,6 @@ class MainWindow(QMainWindow):
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
-        header = QFrame()
-        header.setObjectName("topbar")
-        header.setFixedHeight(72)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(32, 0, 32, 0)
-        header_layout.addWidget(QLabel("Рабочее место мастера-приёмщика"))
-        header_layout.addStretch()
-        demo = QLabel("ДАННЫЕ SQLITE" if database is not None else "ДЕМОНСТРАЦИОННЫЕ ДАННЫЕ")
-        demo.setObjectName("demo")
-        header_layout.addWidget(demo)
-        right_layout.addWidget(header)
         self.pages = QStackedWidget()
         self.services_page = ServicesPage(database=database)
         self.orders_page = OrdersPage(self.clients, self.cars, self.services_page.services, database=database, demo=database is None)
@@ -330,14 +319,6 @@ class MainWindow(QMainWindow):
                 button.clicked.connect(lambda checked=False, section=name: self.show_section(section))
             layout.addWidget(button)
         layout.addStretch()
-        line = QFrame()
-        line.setObjectName("divider")
-        line.setFixedHeight(1)
-        layout.addWidget(line)
-        footer = QLabel("Учебный проект\nГрафический прототип · 01")
-        footer.setObjectName("sidebarFooter")
-        footer.setContentsMargins(10, 14, 0, 0)
-        layout.addWidget(footer)
         return sidebar
 
     def build_clients(self):
@@ -486,7 +467,7 @@ class MainWindow(QMainWindow):
                 table.selectRow(row)
         table.blockSignals(False)
         self.client_count.setText(str(len(self.clients)))
-        self.clients_footer.setText(f"Показано: {len(visible)} из {len(self.clients)}  ·  {self.storage_note}")
+        self.clients_footer.setText(f"Показано: {len(visible)} из {len(self.clients)}")
         self.empty_clients.setVisible(not visible)
         table.setVisible(bool(visible))
         self.update_client_actions()
@@ -570,10 +551,6 @@ class MainWindow(QMainWindow):
             (self.clients, self.database.list_clients),
             (self.cars, self.database.list_cars),
         ])
-
-    @property
-    def storage_note(self):
-        return "Изменения сохранены в SQLite" if self.database is not None else "Изменения хранятся только до закрытия приложения"
 
     def car_count(self, client_id):
         return sum(car["owner_id"] == client_id for car in self.cars)
@@ -727,7 +704,7 @@ class MainWindow(QMainWindow):
                 table.selectRow(row)
         table.blockSignals(False)
         self.car_total.setText(str(len(self.cars)))
-        self.cars_footer.setText(f"Найдено: {len(visible)} из {len(self.cars)}  ·  {self.storage_note}")
+        self.cars_footer.setText(f"Найдено: {len(visible)} из {len(self.cars)}")
         self.empty_cars.setVisible(not visible)
         table.setVisible(bool(visible))
         self.update_car_actions()
@@ -814,7 +791,6 @@ STYLE = """
 QWidget { font-family: 'Segoe UI'; font-size: 13px; color: #344054; }
 QMainWindow, QWidget#central { background: #F5F7FA; }
 QFrame#sidebar { background: #FFFFFF; border-right: 1px solid #E5E9F0; }
-QFrame#topbar { background: #FFFFFF; border-bottom: 1px solid #E5E9F0; }
 QLabel#brand { font-size: 22px; font-weight: 700; color: #24334B; }
 QLabel#subtitle { font-size: 10px; color: #8A94A5; letter-spacing: 1px; }
 QPushButton#nav, QPushButton#activeNav { text-align: left; padding-left: 12px;
@@ -823,9 +799,6 @@ QPushButton#nav:disabled { color: #7C8798; background: transparent; }
 QPushButton#nav { color: #7C8798; background: transparent; }
 QPushButton#nav:hover { background: #F5F7FA; }
 QPushButton#activeNav { background: #EBF1FD; color: #3567C4; font-weight: 600; }
-QLabel#sidebarFooter { color: #919AA8; font-size: 11px; line-height: 1.5; }
-QFrame#divider { background: #E9EDF3; }
-QLabel#demo { color: #8792A3; font-size: 10px; letter-spacing: 0.6px; }
 QLabel#pageTitle { font-size: 28px; font-weight: 650; color: #24334B; }
 QLabel#muted { color: #8690A0; font-size: 12px; }
 QPushButton#primary { background: #386BD6; border: 1px solid #386BD6;

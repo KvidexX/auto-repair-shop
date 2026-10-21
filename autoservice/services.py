@@ -275,8 +275,7 @@ class ServicesPage(QWidget):
                 self.table.selectRow(row)
         self.table.blockSignals(False)
         self.total.setText(str(len(self.services)))
-        storage_note = "Изменения сохранены в SQLite" if self.database is not None else "Изменения хранятся только до закрытия приложения"
-        self.footer.setText(f"Найдено: {len(visible)} из {len(self.services)}  ·  {storage_note}")
+        self.footer.setText(f"Найдено: {len(visible)} из {len(self.services)}")
         self.empty.setVisible(not visible)
         self.table.setVisible(bool(visible))
         self.update_actions()
