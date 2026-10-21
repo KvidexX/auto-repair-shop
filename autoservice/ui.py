@@ -80,10 +80,29 @@ def light_palette():
             QPalette.ColorRole.Light: '#FFFFFF', QPalette.ColorRole.Midlight: '#F8FAFC',
             QPalette.ColorRole.Mid: '#F8FAFC', QPalette.ColorRole.Dark: '#F8FAFC',
             QPalette.ColorRole.Shadow: '#DDE3EC',
+            QPalette.ColorRole.ToolTipBase: '#FFFFFF', QPalette.ColorRole.ToolTipText: '#344054',
+            QPalette.ColorRole.Link: '#3767B2', QPalette.ColorRole.LinkVisited: '#294F91',
+            QPalette.ColorRole.BrightText: '#FFFFFF', QPalette.ColorRole.PlaceholderText: '#818B9C',
+            QPalette.ColorRole.Accent: '#3767B2',
         }.items():
             palette.setColor(group, role, QColor(color))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor('#98A2B3'))
+    for role in (QPalette.ColorRole.WindowText, QPalette.ColorRole.ButtonText):
+        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor('#818B9C'))
     return palette
+
+
+def apply_light_theme(app):
+    """Одна тема для SQLite, demo и снимков, включая Qt popup-окна Windows."""
+    app.setStyle('Fusion')
+    app.styleHints().setColorScheme(Qt.ColorScheme.Light)
+    app.setPalette(light_palette())
+    if not getattr(app, '_light_theme_fixed', False):
+        def restore_palette(palette):
+            if palette != light_palette():
+                app.setPalette(light_palette())
+        app.paletteChanged.connect(restore_palette)
+        app._light_theme_fixed = True
 
 
 class ComboStyle(QProxyStyle):
@@ -129,11 +148,11 @@ class OwnerComboBox(QComboBox):
         view.entered.connect(view.setCurrentIndex)
         view.setStyleSheet('QListView { background: #FFFFFF; color: #344054; border: none; outline: none; padding: 0; }')
         self.setView(view)
-        self.setMaxVisibleItems(8)
+        self.setMaxVisibleItems(6)
 
     def showPopup(self):
         available = self.screen().availableGeometry()
-        rows = min(max(self.count(), 1), 8, max(1, (available.height() - 40) // 38))
+        rows = min(max(self.count(), 1), 6, max(1, (available.height() - 40) // 38))
         self.setMaxVisibleItems(rows)
         self.view().setMaximumHeight(rows * 38)
         popup = self.view().window()

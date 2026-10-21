@@ -68,8 +68,24 @@ def create_order(order_id, created_on, client, car, services, reason):
             "status": ORDER_STATUSES[0], "completed_at": None}
 
 
+def edit_order(order, client, car, services, reason, *, reprice_service_ids=()):
+    """Новый снимок активного документа; оставшиеся работы сохраняют свои цены."""
+    if order["status"] == ORDER_STATUSES[-1]:
+        raise ValueError("Завершённый заказ-наряд нельзя редактировать.")
+    retained = {item["service_id"]: item for item in order["items"]}
+    services = [({"id": s["id"], "name": retained[s["id"]]["name"], "price": retained[s["id"]]["price"]}
+                 if s["id"] in retained and s["id"] not in reprice_service_ids else s) for s in services]
+    result = create_order(order["id"], order["date"], client, car, services, reason)
+    result.update(status=order["status"], completed_at=order["completed_at"])
+    if client["id"] == order["client_id"]:
+        result["client_name"] = order["client_name"]
+    if car["id"] == order["car_id"]:
+        result["car_snapshot"] = dict(order["car_snapshot"])
+    return result
+
+
 def advance_order(order):
-    """Единственная операция изменения оформленного документа — следующий этап."""
+    """Последовательный переход на следующий этап выполнения."""
     index = ORDER_STATUSES.index(order["status"])
     if index == len(ORDER_STATUSES) - 1:
         return False

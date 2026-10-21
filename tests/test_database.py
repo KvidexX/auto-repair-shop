@@ -43,7 +43,7 @@ class DatabaseTests(unittest.TestCase):
     def test_new_database_schema_and_safe_reinitialization(self):
         self.assertTrue(self.path.is_file())
         self.assertEqual(self.db._connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
-        self.assertEqual(self.db._connection.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertEqual(self.db._connection.execute("PRAGMA user_version").fetchone()[0], 2)
         names = {r[0] for r in self.db._connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         self.assertEqual(names - {"sqlite_sequence"}, set(TABLES))
         self.assertNotIn("history", names)
@@ -299,8 +299,10 @@ class DatabaseTests(unittest.TestCase):
         _, car, service, order = self.create_document()
         record = self.db.add_appointment(car["id"], self.tomorrow, time(9), "Причина")
         self.db.cancel_appointment(record["id"])
+        for _ in range(3):
+            order = self.db.advance_order(order["id"])
         for sql, parameters in [
-            ("UPDATE orders SET status='Готов к выдаче' WHERE id=?", (order["id"],)),
+            ("UPDATE orders SET status='Оформлен' WHERE id=?", (order["id"],)),
             ("UPDATE orders SET client_name='Подмена' WHERE id=?", (order["id"],)),
             ("DELETE FROM orders WHERE id=?", (order["id"],)),
             ("UPDATE order_items SET price=1 WHERE order_id=?", (order["id"],)),

@@ -1,5 +1,7 @@
 """Заказ-наряды: снимки документов, подключаемая SQLite и смена статуса."""
 
+import sqlite3
+
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter
 from PySide6.QtWidgets import (
@@ -8,7 +10,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QStyle,
 )
 
-from .data import ORDER_STATUSES, create_order, advance_order, make_orders, normalize_plate, local_now
+from .data import ORDER_STATUSES, create_order, edit_order, advance_order, make_orders, normalize_plate, local_now
 from .persistence import save_reference_change
 from .ui import OwnerComboBox, RowSelectionDelegate, icon
 
@@ -77,13 +79,15 @@ class StatusDelegate(QStyledItemDelegate):
 
 
 class OrderDialog(QDialog):
-    def __init__(self, clients, cars, services, parent=None, *, save_order=None):
+    def __init__(self, clients, cars, services, parent=None, *, save_order=None, order=None):
         super().__init__(parent)
         self.clients, self.cars, self.services = clients, cars, services
         self.save_order = save_order
         self.saved_order = None
-        self.selected_ids = []
-        self.setWindowTitle("Новый заказ-наряд")
+        self.original_order = order
+        self.retained_items = {i["service_id"]: {"id": i["service_id"], "name": i["name"], "price": i["price"]} for i in order["items"]} if order else {}
+        self.selected_ids = list(self.retained_items)
+        self.setWindowTitle("Редактирование заказ-наряда " + number(order) if order else "Новый заказ-наряд")
         self.setObjectName("orderDialog")
         self.setModal(True)
         self.setFixedSize(760, 630)
@@ -158,9 +162,9 @@ class OrderDialog(QDialog):
         self.cancel_button = QPushButton("Отмена")
         self.cancel_button.setObjectName("secondary")
         self.cancel_button.setFixedSize(120, 40)
-        self.save_button = QPushButton("Создать заказ")
+        self.save_button = QPushButton("Сохранить изменения" if order else "Создать заказ")
         self.save_button.setObjectName("primary")
-        self.save_button.setFixedSize(156, 40)
+        self.save_button.setFixedSize(190 if order else 156, 40)
         self.save_button.setDefault(True)
         self.cancel_button.clicked.connect(self.reject)
         self.save_button.clicked.connect(self.validate_and_accept)
@@ -169,6 +173,10 @@ class OrderDialog(QDialog):
         layout.addLayout(buttons)
         self.client_input.currentIndexChanged.connect(self.update_cars)
         self.update_cars()
+        if order:
+            self.client_input.setCurrentIndex(self.client_input.findData(order["client_id"]))
+            self.car_input.setCurrentIndex(self.car_input.findData(order["car_id"]))
+            self.reason_input.setText(order["reason"])
         self.refresh_items()
         self.client_input.setFocus()
 
@@ -183,6 +191,7 @@ class OrderDialog(QDialog):
 
     def selected_services(self):
         by_id = {s["id"]: s for s in self.services}
+        by_id.update(self.retained_items)
         return [by_id[sid] for sid in self.selected_ids if sid in by_id]
 
     def refresh_items(self):
@@ -209,7 +218,8 @@ class OrderDialog(QDialog):
     def remove_item(self):
         rows = self.items_table.selectionModel().selectedRows()
         if rows:
-            del self.selected_ids[rows[0].row()]
+            sid = self.selected_ids.pop(rows[0].row())
+            self.retained_items.pop(sid, None)
             self.refresh_items()
 
     def fail(self, field, message):
@@ -233,24 +243,32 @@ class OrderDialog(QDialog):
             self.fail(self.service_input, "Выберите хотя бы одну услугу из существующего каталога.")
             return
         if self.save_order is not None:
-            self.saved_order = self.save_order(self.values())
+            try:
+                self.saved_order = self.save_order(self.values())
+            except ValueError as error:
+                self.fail(self.save_button, str(error))
+                return
             if self.saved_order is None:
                 self.fail(self.save_button, "Заказ не сохранён. Введённые данные остались в форме — повторите попытку.")
                 return
         self.accept()
 
     def values(self):
-        return {"client_id": self.client_input.currentData(), "car_id": self.car_input.currentData(),
-                "reason": self.reason_input.text().strip(), "service_ids": list(self.selected_ids)}
+        values = {"client_id": self.client_input.currentData(), "car_id": self.car_input.currentData(),
+                  "reason": self.reason_input.text().strip(), "service_ids": list(self.selected_ids)}
+        if self.original_order:
+            values["reprice_service_ids"] = [sid for sid in self.selected_ids if sid not in self.retained_items]
+        return values
 
 
 class OrderCard(QDialog):
     status_changed = Signal()
 
-    def __init__(self, order, parent=None, *, advance=None):
+    def __init__(self, order, parent=None, *, advance=None, edit=None):
         super().__init__(parent)
         self.order = order
         self.advance = advance
+        self.edit = edit
         self.setWindowTitle("Заказ-наряд " + number(order))
         self.setObjectName("orderCard")
         self.setModal(True)
@@ -305,11 +323,17 @@ class OrderCard(QDialog):
         total.setObjectName("orderTotal")
         total.setAlignment(Qt.AlignmentFlag.AlignRight)
         layout.addWidget(total)
+        self.total_label = total
         status_row = QHBoxLayout()
         self.status_label = QLabel()
         self.status_label.setMinimumHeight(32)
         status_row.addWidget(self.status_label)
         status_row.addStretch()
+        self.edit_button = QPushButton("Редактировать")
+        self.edit_button.setObjectName("secondary")
+        self.edit_button.setFixedSize(150, 40)
+        self.edit_button.clicked.connect(self.edit_document)
+        status_row.addWidget(self.edit_button)
         self.next_button = QPushButton()
         self.next_button.setObjectName("primary")
         self.next_button.setFixedSize(230, 40)
@@ -318,7 +342,8 @@ class OrderCard(QDialog):
         status_row.addWidget(self.next_button)
         layout.addLayout(status_row)
         footer = QHBoxLayout()
-        hint = QLabel("Состав работ и сведения документа зафиксированы")
+        hint = QLabel("Сведения завершённого заказа зафиксированы")
+        self.document_hint = hint
         hint.setObjectName("muted")
         footer.addWidget(hint)
         footer.addStretch()
@@ -329,6 +354,24 @@ class OrderCard(QDialog):
         footer.addWidget(self.close_button)
         layout.addLayout(footer)
         self.update_status()
+
+    def edit_document(self):
+        if self.edit is None or self.order["status"] == ORDER_STATUSES[-1]:
+            return
+        saved = self.edit(self.order["id"], self)
+        if saved is not None:
+            self.order = saved
+            self.client_field.setText(saved["client_name"])
+            car = saved["car_snapshot"]
+            self.car_field.setText(f"{car['brand']} {car['model']} · {car['plate']}")
+            for field in (self.client_field, self.car_field):
+                field.setToolTip(field.text())
+                field.setCursorPosition(0)
+            self.reason_field.setPlainText(saved["reason"])
+            fill_items(self.items_table, saved["items"])
+            self.total_label.setText("Итого: " + money(saved["total"]))
+            self.update_status()
+            self.status_changed.emit()
 
     def next_stage(self):
         if self.order["status"] == ORDER_STATUSES[-1]:
@@ -345,6 +388,8 @@ class OrderCard(QDialog):
 
     def update_status(self):
         status = self.order["status"]
+        self.edit_button.setVisible(self.edit is not None and status != ORDER_STATUSES[-1])
+        self.document_hint.setVisible(status == ORDER_STATUSES[-1])
         completed = self.order["completed_at"]
         self.completed_label.setText("Дата завершения: " + completed.strftime("%d.%m.%Y · %H:%M") + " (Владивосток, UTC+10)" if completed else "")
         self.completed_label.setVisible(completed is not None)
@@ -562,6 +607,37 @@ class OrdersPage(QWidget):
         self.refresh(order_id)
         self.orders_changed.emit()
 
+    def edit_order(self, order_id, parent=None):
+        order = next(o for o in self.orders if o["id"] == order_id)
+        if self.database is not None:
+            order = self.save_document(lambda: self.database.get_order(order_id), parent or self)
+        if order is None or order["status"] == ORDER_STATUSES[-1]:
+            return None
+        dialog = OrderDialog(self.clients, self.cars, self.services, parent or self, order=order)
+        def save(values):
+            if self.database is not None:
+                saved = self.save_document(lambda: self.database.update_order(order_id, **values), dialog)
+                if saved is not None:
+                    # После COMMIT перечитываем документ. Если повторное чтение
+                    # временно недоступно, используем уже проверенный снимок
+                    # зафиксированной транзакции: запись действительно сохранена.
+                    try:
+                        saved.update(self.database.get_order(order_id))
+                    except sqlite3.Error:
+                        pass
+                return saved
+            client = next(c for c in self.clients if c["id"] == values["client_id"])
+            car = next(c for c in self.cars if c["id"] == values["car_id"])
+            updated = edit_order(order, client, car, dialog.selected_services(), values["reason"],
+                                 reprice_service_ids=values["reprice_service_ids"])
+            order.update(updated)
+            return order
+        dialog.save_order = save
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.document_changed(order_id)
+            return dialog.saved_order
+        return None
+
     def open_order(self):
         order = self.selected_order()
         if order is not None:
@@ -570,7 +646,7 @@ class OrdersPage(QWidget):
                 if order is None:
                     return
                 self.document_changed(order["id"])
-            dialog = OrderCard(order, self, advance=self.advance_saved_order if self.database is not None else None)
+            dialog = OrderCard(order, self, advance=self.advance_saved_order if self.database is not None else None, edit=self.edit_order)
             dialog.status_changed.connect(lambda: self.document_changed(order["id"]))
             dialog.exec()
             self.refresh(order["id"])

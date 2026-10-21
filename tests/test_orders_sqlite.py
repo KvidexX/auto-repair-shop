@@ -396,11 +396,11 @@ class OrdersSqliteTests(unittest.TestCase):
         order = self.create()
         with self.assertRaises(sqlite3.IntegrityError):
             self.db._connection.execute("UPDATE orders SET status='Готов к выдаче' WHERE id=?", (order["id"],))
-        with self.assertRaises(sqlite3.IntegrityError):
-            self.db._connection.execute("UPDATE orders SET reason='Изменено' WHERE id=?", (order["id"],))
         self.assertEqual(self.db.get_order(order["id"]), order)
         self.finish()
         completed = self.db.get_order(order["id"])
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db._connection.execute("UPDATE orders SET reason='Изменено' WHERE id=?", (order["id"],))
         self.assertEqual(self.db.advance_order(order["id"]), completed)
         with self.assertRaises(sqlite3.IntegrityError):
             self.db._connection.execute("UPDATE orders SET completed_at=? WHERE id=?", ((completed["completed_at"] + timedelta(days=1)).isoformat(), order["id"]))

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 
 from autoservice.database import Database
 from autoservice.data import CLIENTS, CARS, normalize_plate
-from autoservice.ui import icon, RowSelectionDelegate, OwnerComboBox
+from autoservice.ui import icon, RowSelectionDelegate, OwnerComboBox, apply_light_theme
 from autoservice.services import ServicesPage, ServiceDialog
 from autoservice.appointments import AppointmentsPage, AppointmentDialog, PLANNED
 from autoservice.orders import OrdersPage, OrderDialog, OrderCard
@@ -856,6 +856,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--demo", action="store_true", help="Интерактивные демонстрационные данные без SQLite")
     parser.add_argument("--screenshot", type=Path,
                         help="Сохранить PNG и завершить работу; имя без пути сохраняется в screenshots/")
     parser.add_argument("--screen", choices=("orders", "clients", "car", "services", "calendar", "history"), default="orders",
@@ -874,12 +875,12 @@ def main():
             args.screenshot = Path(__file__).resolve().parent / "screenshots" / args.screenshot.name
         args.screenshot.parent.mkdir(parents=True, exist_ok=True)
     app = QApplication(sys.argv[:1])
-    app.setStyle("Fusion")
+    apply_light_theme(app)
     app.setFont(QFont("Segoe UI", 10))
     app.setStyleSheet(STYLE)
     try:
         # Снимки используют прежние данные в памяти, не открывая рабочую БД.
-        with (nullcontext() if args.screenshot else Database()) as database:
+        with (nullcontext() if args.screenshot or args.demo else Database()) as database:
             try:
                 window = MainWindow(database=database)
                 window.centralWidget().setObjectName("central")

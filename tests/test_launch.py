@@ -34,7 +34,7 @@ def launch_worker(scenario, report_path, arguments):
 
     def database(*args, **kwargs):
         report["database_calls"] += 1
-        if scenario == "screenshot":
+        if scenario in ("screenshot", "demo"):
             raise AssertionError("Скриншоты не должны открывать SQLite")
         assert not args and not kwargs, "Обычный запуск должен использовать Database()"
         db = real_database()
@@ -202,6 +202,15 @@ class LaunchTests(unittest.TestCase):
         self.images.append(image)
         return image
 
+    def test_demo_never_opens_database_and_resets_between_launches(self):
+        first = self.run_launch("demo", ("--demo",))
+        second = self.run_launch("demo", ("--demo",))
+        self.assertEqual(first["database_calls"], 0)
+        self.assertFalse(first["database_passed"])
+        self.assertEqual(len(first["snapshot"]["clients"]), 7)
+        self.assertEqual(first["snapshot"], second["snapshot"])
+        self.assertFalse(self.database_path.exists())
+
     def test_normal_launch_creates_empty_database_and_passes_it_to_window(self):
         self.assertFalse(self.database_path.exists())
         report = self.run_launch()
@@ -212,7 +221,7 @@ class LaunchTests(unittest.TestCase):
         self.assertTrue(self.database_path.exists())
         self.assertTrue(all(records == [] for records in report["snapshot"].values()))
         with closing(sqlite3.connect(self.database_path)) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
             self.assertEqual(connection.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name!='sqlite_sequence'").fetchone()[0], 6)
 
     def test_full_gui_workflow_survives_complete_process_restart(self):

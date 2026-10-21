@@ -7,7 +7,7 @@ from pathlib import Path
 import sqlite3
 
 from .data import (
-    CARS, CATEGORIES, CLIENTS, LOCAL_TIMEZONE, SERVICES, advance_order, create_order,
+    CARS, CATEGORIES, CLIENTS, LOCAL_TIMEZONE, SERVICES, advance_order, create_order, edit_order,
     local_now, make_appointments, make_orders, normalize_plate, normalize_service_name,
 )
 
@@ -106,6 +106,32 @@ WHEN NEW.position >= (SELECT item_count FROM orders WHERE id = NEW.order_id)
 BEGIN SELECT RAISE(ABORT,'Order composition is fixed'); END;
 """
 
+
+MIGRATION_2 = """
+DROP TRIGGER orders_readonly;
+CREATE TRIGGER orders_readonly BEFORE UPDATE ON orders
+WHEN OLD.status = 'Завершён' OR NEW.id IS NOT OLD.id OR NEW.date IS NOT OLD.date
+ OR (NEW.status = OLD.status AND NEW.completed_at IS NOT OLD.completed_at)
+ OR (NEW.status != OLD.status AND (
+    NEW.client_id IS NOT OLD.client_id OR NEW.client_name IS NOT OLD.client_name
+    OR NEW.car_id IS NOT OLD.car_id OR NEW.car_brand IS NOT OLD.car_brand
+    OR NEW.car_model IS NOT OLD.car_model OR NEW.car_plate IS NOT OLD.car_plate
+    OR NEW.reason IS NOT OLD.reason OR NEW.total IS NOT OLD.total OR NEW.item_count IS NOT OLD.item_count
+    OR NOT ((OLD.status = 'Оформлен' AND NEW.status = 'В работе' AND NEW.completed_at IS NULL)
+        OR (OLD.status = 'В работе' AND NEW.status = 'Готов к выдаче' AND NEW.completed_at IS NULL)
+        OR (OLD.status = 'Готов к выдаче' AND NEW.status = 'Завершён' AND NEW.completed_at IS NOT NULL))))
+BEGIN SELECT RAISE(ABORT,'Completed orders are read only; use the next status'); END;
+DROP TRIGGER items_keep;
+CREATE TRIGGER items_keep BEFORE DELETE ON order_items
+WHEN (SELECT status FROM orders WHERE id = OLD.order_id) = 'Завершён'
+BEGIN SELECT RAISE(ABORT,'Completed order items cannot be deleted'); END;
+DROP TRIGGER items_count;
+CREATE TRIGGER items_count BEFORE INSERT ON order_items
+WHEN (SELECT status FROM orders WHERE id = NEW.order_id) = 'Завершён'
+ OR NEW.position >= (SELECT item_count FROM orders WHERE id = NEW.order_id)
+BEGIN SELECT RAISE(ABORT,'Invalid order composition'); END;
+"""
+
 TABLES = ("clients", "cars", "services", "appointments", "orders", "order_items")
 
 
@@ -146,9 +172,10 @@ class Database:
         try:
             self._connection.execute("PRAGMA foreign_keys = ON")
             version = self._connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
+            if version not in (0, 1, 2):
                 raise ValueError("Неподдерживаемая версия базы данных.")
-            self._connection.executescript("BEGIN IMMEDIATE;\n" + SCHEMA + "\nPRAGMA user_version=1;\nCOMMIT;")
+            if version < 2:
+                self._connection.executescript("BEGIN IMMEDIATE;\n" + (SCHEMA if version == 0 else "") + MIGRATION_2 + "\nPRAGMA user_version=2;\nCOMMIT;")
         except BaseException:
             self._connection.close()
             raise
@@ -343,10 +370,12 @@ class Database:
         order_id = self._insert("orders", {"id": order["id"], "date": _day(order["date"]), "client_id": order["client_id"],
                     "client_name": order["client_name"], "car_id": order["car_id"], "car_brand": car["brand"],
                     "car_model": car["model"], "car_plate": car["plate"], "reason": order["reason"],
-                    "total": order["total"], "item_count": len(order["items"]), "status": order["status"],
-                    "completed_at": order["completed_at"].isoformat() if order["completed_at"] else None})
+                    "total": order["total"], "item_count": len(order["items"]), "status": "Готов к выдаче" if order["status"] == "Завершён" else order["status"],
+                    "completed_at": None})
         for position, item in enumerate(order["items"]):
             self._insert("order_items", {"order_id": order_id, "position": position, **item})
+        if order["status"] == "Завершён":
+            self._update("orders", order_id, {"status": "Завершён", "completed_at": order["completed_at"].isoformat()})
         return order_id
 
     def add_order(self, client_id, car_id, service_ids, reason):
@@ -356,6 +385,26 @@ class Database:
             # SQLite назначает ID, не переиспользуя ранее сохранённые значения.
             order = create_order(None, local_now().date(), client, car, services, reason)
             order_id = self._store_order(order)
+        return self.get_order(order_id)
+
+    def update_order(self, order_id, client_id, car_id, service_ids, reason, *, reprice_service_ids=()):
+        with self.transaction():
+            previous = self.get_order(order_id)
+            if previous["status"] == "Завершён":
+                raise ValueError("Завершённый заказ-наряд нельзя редактировать.")
+            retained = {item["service_id"]: item for item in previous["items"]}
+            services = [({"id": sid, "name": retained[sid]["name"], "price": retained[sid]["price"]}
+                         if sid in retained and sid not in reprice_service_ids else self.get_service(sid))
+                        for sid in service_ids]
+            order = edit_order(previous, self.get_client(client_id), self.get_car(car_id), services, reason,
+                               reprice_service_ids=reprice_service_ids)
+            car = order["car_snapshot"]
+            self._connection.execute("DELETE FROM order_items WHERE order_id=?", (order_id,))
+            self._update("orders", order_id, {"client_id": client_id, "client_name": order["client_name"],
+                         "car_id": car_id, "car_brand": car["brand"], "car_model": car["model"], "car_plate": car["plate"],
+                         "reason": order["reason"], "total": order["total"], "item_count": len(order["items"])})
+            for position, item in enumerate(order["items"]):
+                self._insert("order_items", {"order_id": order_id, "position": position, **item})
         return self.get_order(order_id)
 
     def get_order(self, order_id):

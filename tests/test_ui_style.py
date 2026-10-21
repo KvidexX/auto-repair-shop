@@ -126,7 +126,7 @@ class UiStyleTests(unittest.TestCase):
         combo.addItems([f'Клиент {i}' for i in range(200)])
         combo.showPopup()
         QTest.qWait(30)
-        self.assertLessEqual(combo.view().window().height(), 324)
+        self.assertLessEqual(combo.view().window().height(), 248)
         self.assertGreater(combo.view().verticalScrollBar().maximum(), 0)
         self.assertTrue(combo.screen().availableGeometry().contains(combo.view().window().frameGeometry()))
         QTest.keyClick(combo.view(), Qt.Key.Key_End)
