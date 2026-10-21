@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $originalPath = $env:PATH
 $originalCache = $env:PYINSTALLER_CONFIG_DIR
 Push-Location -LiteralPath $PSScriptRoot
