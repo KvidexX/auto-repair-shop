@@ -6,6 +6,9 @@ __pycache__/
 .idea/
 build/
 dist/
+release/
+*.pkg
+*.toc
 *.log
 *.sqlite3
 *.db
