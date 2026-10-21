@@ -2,7 +2,6 @@
 
 import copy
 from datetime import date
-from pathlib import Path
 import unittest
 
 from PySide6.QtCore import Qt, QTimer
@@ -10,8 +9,14 @@ from PySide6.QtGui import QFont
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QTableWidget
 
-from autoservice.data import CLIENTS, CARS, normalize_plate
-from main import MainWindow, CarDialog, ClientDialog, RowSelectionDelegate, STYLE
+from autoservice.demo_data import CLIENTS, CARS
+from autoservice.data import normalize_plate
+from autoservice.app import MainWindow
+from autoservice.dialogs import CarDialog, ClientDialog
+from autoservice.ui import RowSelectionDelegate
+from autoservice.styles import STYLE
+from tests.support import SCREENSHOTS
+
 
 
 class PrototypeTests(unittest.TestCase):
@@ -95,7 +100,7 @@ class PrototypeTests(unittest.TestCase):
                          pos=w.car_table.visualItemRect(w.car_table.item(1, 1)).center())
         self.assertEqual(w.selected_car()["id"], 2)
         self.assertTrue(w.edit_car_button.isEnabled())
-        output = Path(__file__).resolve().parents[1] / "screenshots"
+        output = SCREENSHOTS
         output.mkdir(exist_ok=True)
         self.assertTrue(w.grab().save(str(output / "cars.png"), "PNG"))
         dialog = CarDialog(w.clients, w.cars, w)

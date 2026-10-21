@@ -8,8 +8,8 @@ from PySide6.QtWidgets import (
 )
 
 from .data import normalize_plate, normalize_service_name
-from .orders import OrderCard, configure_table, money, number
-from .ui import icon
+from .orders import OrderCard, money, number
+from .ui import configure_table, icon
 
 
 class HistoryPage(QWidget):

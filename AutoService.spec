@@ -3,6 +3,8 @@ from pathlib import Path
 from PyInstaller.utils.hooks import get_package_paths
 
 root = Path(SPECPATH)
+# Все импорты autoservice.* статические: PyInstaller обнаруживает их из main.py.
+# QtWidgets подключает штатные hooks QtGui/QtCore и платформенный плагин Windows.
 qt = Path(get_package_paths('PySide6')[1])
 # Python и Qt могут поставлять разные версии runtime. В корне загрузчика
 # используем полный согласованный комплект из установленного колеса PySide6.

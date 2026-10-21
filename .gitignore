@@ -11,9 +11,16 @@ release/
 *.toc
 *.log
 *.sqlite3
+*.sqlite3-*
+*.sqlite
+*.sqlite-*
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
+backups/
+*.exe
+*.zip
 .env
 .env.*
 !.env.example

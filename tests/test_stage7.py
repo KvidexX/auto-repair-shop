@@ -2,17 +2,18 @@
 
 import copy
 from datetime import datetime, timedelta
-from pathlib import Path
 from unittest.mock import patch
 import unittest
 
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QTableWidget
+from PySide6.QtWidgets import QTableWidget
 
 from tests import test_stage6 as helpers
 from autoservice.data import LOCAL_TIMEZONE, advance_order, local_now
 from autoservice.orders import OrderCard, number
+from tests.support import SCREENSHOTS
+
 
 
 class HistoryTests(unittest.TestCase):
@@ -205,7 +206,7 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(h.table.horizontalScrollBar().maximum(), 0)
         self.choose(h.table, 23)
         QTest.qWait(30)
-        output = Path(__file__).resolve().parents[1] / "screenshots"
+        output = SCREENSHOTS
         self.assertTrue(w.grab().save(str(output / "history.png"), "PNG"))
         card = OrderCard(h.selected_order(), w)
         card.show()

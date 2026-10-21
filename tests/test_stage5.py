@@ -1,8 +1,7 @@
 """Проверки расписания, бронирования и ссылок на единые справочники."""
 
 import copy
-from datetime import datetime, timedelta, time
-from pathlib import Path
+from datetime import timedelta, time
 from unittest.mock import patch
 import unittest
 
@@ -11,8 +10,9 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDialog, QMessageBox
 
 from autoservice.appointments import AppointmentDialog, PLANNED, CANCELLED, SLOTS, local_now, qt_date
-from main import ClientDialog, CarDialog
+from autoservice.dialogs import ClientDialog, CarDialog
 from tests import test_stage4 as helpers
+from tests.support import SCREENSHOTS
 
 
 # Переиспользуем только тестовые помощники, а не сценарии прошлых этапов.
@@ -196,7 +196,7 @@ class AppointmentsTests(unittest.TestCase):
         self.assertEqual(p.selected_appointment()["id"], 2)
         self.assertEqual(self.window.nav_buttons["calendar"].objectName(), "activeNav")
         self.assertTrue(self.window.nav_buttons["history"].isEnabled())
-        output = Path(__file__).resolve().parents[1] / "screenshots"
+        output = SCREENSHOTS
         self.assertTrue(self.window.grab().save(str(output / "appointments.png"), "PNG"))
         dialog = AppointmentDialog(self.window.clients, self.window.cars, p.appointments, self.window)
         dialog.show()

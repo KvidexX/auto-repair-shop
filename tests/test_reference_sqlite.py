@@ -13,11 +13,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QMessageBox
 
-from autoservice.data import CLIENTS, CARS, SERVICES, local_now
+from autoservice.demo_data import CLIENTS, CARS, SERVICES
+from autoservice.data import local_now
 from autoservice.database import Database
 from autoservice.services import ServicesPage
 from autoservice.ui import RowSelectionDelegate
-from main import MainWindow, STYLE
+from autoservice.app import MainWindow
+from autoservice.styles import STYLE
 from tests import test_stage4
 
 

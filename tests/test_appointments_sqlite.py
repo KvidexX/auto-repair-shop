@@ -13,10 +13,10 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QMessageBox, QDialog
 
-from autoservice.appointments import AppointmentDialog, PLANNED, CANCELLED, SLOTS, qt_date
+from autoservice.appointments import PLANNED, CANCELLED, SLOTS, qt_date
 from autoservice.data import local_now
 from autoservice.database import Database
-from main import MainWindow
+from autoservice.app import MainWindow
 from tests import test_orders_sqlite as helpers
 
 

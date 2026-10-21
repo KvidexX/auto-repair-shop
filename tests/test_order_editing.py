@@ -10,13 +10,15 @@ from unittest.mock import patch
 from PySide6.QtCore import QPoint, QTimer, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from autoservice.data import edit_order
-from autoservice.database import Database, SCHEMA, load_demo_data
+from autoservice.database import Database, SCHEMA
+from autoservice.demo_data import load_demo_data
 from autoservice.orders import OrderDialog, OrderCard
 from autoservice.ui import apply_light_theme, light_palette
-from main import MainWindow, STYLE
+from autoservice.app import MainWindow
+from autoservice.styles import STYLE
 from tests.test_ui_style import capture
 
 ROOT = Path(__file__).resolve().parents[1]

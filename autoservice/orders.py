@@ -10,9 +10,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QStyle,
 )
 
-from .data import ORDER_STATUSES, create_order, edit_order, advance_order, make_orders, normalize_plate, local_now
+from .data import ORDER_STATUSES, create_order, edit_order, advance_order, normalize_plate, local_now
+from .demo_data import make_orders
 from .persistence import save_reference_change
-from .ui import OwnerComboBox, RowSelectionDelegate, icon
+from .ui import OwnerComboBox, configure_table, icon
 
 STATUS_COLORS = {
     "Оформлен": ("#EEF2F6", "#526278"), "В работе": ("#EAF1FE", "#3566B8"),
@@ -26,25 +27,6 @@ def money(value):
 
 def number(order):
     return f"ЗН-{order['id']:04d}"
-
-
-def configure_table(table, headers):
-    table.setHorizontalHeaderLabels(headers)
-    table.verticalHeader().hide()
-    table.setShowGrid(False)
-    table.setWordWrap(False)
-    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-    table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-    table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-    table.setItemDelegate(RowSelectionDelegate(table))
-    table.setFrameShape(QFrame.Shape.NoFrame)
-    table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
-    header = table.horizontalHeader()
-    header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-    header.setFixedHeight(42)
-    header.setHighlightSections(False)
-    header.setMinimumSectionSize(80)
-    header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
 
 def fill_items(table, items):
@@ -590,10 +572,10 @@ class OrdersPage(QWidget):
             self.table.scrollToTop()
             self.orders_changed.emit()
 
-    def save_document(self, operation, parent):
+    def save_document(self, operation, parent, *, read_only=False):
         saved, order = save_reference_change(parent, self.database, operation, [
             (self.orders, self.database.list_orders),
-        ])
+        ], read_only=read_only)
         # Карточка и история используют объект из единой загруженной коллекции.
         return next(o for o in self.orders if o["id"] == order["id"]) if saved else None
 
@@ -610,7 +592,7 @@ class OrdersPage(QWidget):
     def edit_order(self, order_id, parent=None):
         order = next(o for o in self.orders if o["id"] == order_id)
         if self.database is not None:
-            order = self.save_document(lambda: self.database.get_order(order_id), parent or self)
+            order = self.save_document(lambda: self.database.get_order(order_id), parent or self, read_only=True)
         if order is None or order["status"] == ORDER_STATUSES[-1]:
             return None
         dialog = OrderDialog(self.clients, self.cars, self.services, parent or self, order=order)
@@ -642,7 +624,7 @@ class OrdersPage(QWidget):
         order = self.selected_order()
         if order is not None:
             if self.database is not None:
-                order = self.save_document(lambda: self.database.get_order(order["id"]), self)
+                order = self.save_document(lambda: self.database.get_order(order["id"]), self, read_only=True)
                 if order is None:
                     return
                 self.document_changed(order["id"])

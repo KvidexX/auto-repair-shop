@@ -10,9 +10,10 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget, QStyle,
 )
 
-from .data import make_appointments, local_now
+from .demo_data import make_appointments
+from .data import local_now
 from .persistence import save_reference_change
-from .ui import DateEdit, OwnerComboBox, RowSelectionDelegate, icon
+from .ui import DateEdit, OwnerComboBox, configure_table, icon
 
 PLANNED = "Запланирована"
 CANCELLED = "Отменена"
@@ -265,20 +266,8 @@ class AppointmentsPage(QWidget):
         toolbar.addWidget(self.all_dates)
         card_layout.addLayout(toolbar)
         self.table = QTableWidget(0, 7)
-        self.table.setItemDelegate(RowSelectionDelegate(self.table))
-        self.table.setHorizontalHeaderLabels(["ID записи", "Дата", "Время", "Автомобиль", "Клиент", "Причина обращения", "Статус"])
-        self.table.verticalHeader().hide()
-        self.table.setShowGrid(False)
-        self.table.setWordWrap(False)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setFrameShape(QFrame.Shape.NoFrame)
-        self.table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
+        configure_table(self.table, ["ID записи", "Дата", "Время", "Автомобиль", "Клиент", "Причина обращения", "Статус"], minimum=50)
         header = self.table.horizontalHeader()
-        header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        header.setFixedHeight(42)
-        header.setHighlightSections(False)
         header.setMinimumSectionSize(50)
         header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         for column, width in [(0, 86), (1, 100), (2, 64), (3, 154), (4, 182), (6, 132)]:
@@ -403,7 +392,7 @@ class AppointmentsPage(QWidget):
             return
         if self.database is not None:
             appointment_id = appointment["id"]
-            appointment = self.save_record(lambda: self.database.get_appointment(appointment_id), self)
+            appointment = self.save_record(lambda: self.database.get_appointment(appointment_id), self, read_only=True)
             if appointment is None:
                 return
             self.refresh(appointment_id)
@@ -419,10 +408,10 @@ class AppointmentsPage(QWidget):
             self.refresh(appointment["id"])
             self.scroll_to_selection()
 
-    def save_record(self, operation, parent):
+    def save_record(self, operation, parent, *, read_only=False):
         saved, appointment = save_reference_change(parent, self.database, operation, [
             (self.appointments, self.database.list_appointments),
-        ], unique_message="Это время уже занято. Запись не сохранена — выберите другой интервал.")
+        ], unique_message="Это время уже занято. Запись не сохранена — выберите другой интервал.", read_only=read_only)
         return next(a for a in self.appointments if a["id"] == appointment["id"]) if saved else None
 
     def save_form(self, values, dialog, appointment_id=None):

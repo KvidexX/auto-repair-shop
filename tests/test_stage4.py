@@ -1,7 +1,6 @@
 """Основные сценарии каталога услуг через QtTest."""
 
 import copy
-from pathlib import Path
 import unittest
 
 from PySide6.QtCore import Qt, QTimer
@@ -9,9 +8,12 @@ from PySide6.QtGui import QFont
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QTableWidget
 
-from autoservice.data import SERVICES
-from main import MainWindow, STYLE
+from autoservice.demo_data import SERVICES
+from autoservice.app import MainWindow
+from autoservice.styles import STYLE
 from autoservice.services import ServiceDialog
+from tests.support import SCREENSHOTS
+
 
 
 class ServicesTests(unittest.TestCase):
@@ -174,7 +176,7 @@ class ServicesTests(unittest.TestCase):
         w.show_section("clients")
         w.show_section("services")
         self.assertEqual(p.selected_service()["id"], 2)
-        output = Path(__file__).resolve().parents[1] / "screenshots"
+        output = SCREENSHOTS
         output.mkdir(exist_ok=True)
         self.assertTrue(w.grab().save(str(output / "services.png"), "PNG"))
         dialog = ServiceDialog(p.services, w)

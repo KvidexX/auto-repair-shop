@@ -8,8 +8,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from autoservice.database import Database, TABLES, default_database_path, load_demo_data
-from autoservice.data import CARS, CLIENTS, SERVICES, LOCAL_TIMEZONE, local_now, make_orders
+from autoservice.database import Database, TABLES, default_database_path
+from autoservice.demo_data import load_demo_data
+from autoservice.demo_data import CARS, CLIENTS, SERVICES, make_orders
+from autoservice.data import LOCAL_TIMEZONE, local_now
 
 
 class DatabaseTests(unittest.TestCase):

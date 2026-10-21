@@ -3,7 +3,7 @@
 from PySide6.QtCore import QDate, QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPalette, QTextCharFormat
 from PySide6.QtWidgets import (
-    QCalendarWidget, QComboBox, QDateEdit, QListView, QProxyStyle, QStyleFactory,
+    QCalendarWidget, QComboBox, QDateEdit, QFrame, QHeaderView, QListView, QProxyStyle, QStyleFactory, QTableWidget,
     QStyledItemDelegate, QStyleOptionViewItem, QStyle, QToolButton, QWidget,
 )
 
@@ -66,6 +66,26 @@ class RowSelectionDelegate(QStyledItemDelegate):
         clean = QStyleOptionViewItem(option)
         clean.state &= ~QStyle.StateFlag.State_HasFocus
         super().paint(painter, clean, index)
+
+
+def configure_table(table, headers, *, minimum=80):
+    """Общее поведение таблиц: выбор строки, прокрутка и заголовок."""
+    table.setHorizontalHeaderLabels(headers)
+    table.verticalHeader().hide()
+    table.setShowGrid(False)
+    table.setWordWrap(False)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+    table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+    table.setItemDelegate(RowSelectionDelegate(table))
+    table.setFrameShape(QFrame.Shape.NoFrame)
+    table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
+    header = table.horizontalHeader()
+    header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+    header.setFixedHeight(42)
+    header.setHighlightSections(False)
+    header.setMinimumSectionSize(minimum)
+    header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
 
 def light_palette():

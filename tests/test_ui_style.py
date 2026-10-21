@@ -14,8 +14,13 @@ from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QLabel, QTableVi
 from autoservice.appointments import AppointmentDialog
 from autoservice.services import ServiceDialog
 from autoservice.ui import DateEdit, LightCalendar, OwnerComboBox
-from main import CarDialog, MainWindow, OrderDialog, STYLE
+from autoservice.dialogs import CarDialog
+from autoservice.app import MainWindow
+from autoservice.orders import OrderDialog
+from autoservice.styles import STYLE
 from tests import test_stage4 as helpers
+from tests.support import SCREENSHOTS
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,7 +34,7 @@ def capture(window, filename, dialog=None, popup=None):
         if widget is not None:
             painter.drawPixmap(widget.mapToGlobal(QPoint(0, 0)) - origin, widget.grab())
     painter.end()
-    assert image.save(str(ROOT / 'screenshots' / filename), 'PNG')
+    assert image.save(str(SCREENSHOTS / filename), 'PNG')
 
 
 def scale_probe():

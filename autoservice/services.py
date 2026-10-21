@@ -9,8 +9,9 @@ from PySide6.QtWidgets import (
 )
 
 from .persistence import save_reference_change
-from .data import CATEGORIES, SERVICES, normalize_service_name
-from .ui import OwnerComboBox, RowSelectionDelegate, icon
+from .data import CATEGORIES, normalize_service_name
+from .demo_data import SERVICES
+from .ui import OwnerComboBox, configure_table, icon
 
 
 class ServiceDialog(QDialog):
@@ -185,20 +186,8 @@ class ServicesPage(QWidget):
         toolbar.addWidget(self.search)
         card_layout.addLayout(toolbar)
         self.table = QTableWidget(0, 5)
-        self.table.setItemDelegate(RowSelectionDelegate(self.table))
-        self.table.setHorizontalHeaderLabels(["ID услуги", "Наименование услуги", "Категория", "Нормативное время", "Стоимость"])
-        self.table.verticalHeader().hide()
-        self.table.setShowGrid(False)
-        self.table.setWordWrap(False)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setFrameShape(QFrame.Shape.NoFrame)
-        self.table.setVerticalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
+        configure_table(self.table, ["ID услуги", "Наименование услуги", "Категория", "Нормативное время", "Стоимость"], minimum=90)
         header = self.table.horizontalHeader()
-        header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        header.setFixedHeight(42)
-        header.setHighlightSections(False)
         header.setMinimumSectionSize(90)
         header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         for column, width in [(0, 100), (2, 223), (3, 162), (4, 115)]:

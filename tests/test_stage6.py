@@ -1,7 +1,6 @@
 """Заказы: оформление, исторические снимки, статусы и защита ссылок."""
 
 import copy
-from pathlib import Path
 import unittest
 
 from PySide6.QtCore import Qt
@@ -9,10 +8,12 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QTableWidget, QMessageBox
 
 from tests import test_stage4 as helpers
-from main import MainWindow
-from autoservice.orders import OrderDialog, OrderCard, number, money
+from autoservice.app import MainWindow
+from autoservice.orders import OrderDialog, OrderCard
 from autoservice.data import ORDER_STATUSES, create_order, advance_order
 from autoservice.appointments import local_now
+from tests.support import SCREENSHOTS
+
 
 
 class OrdersTests(unittest.TestCase):
@@ -301,7 +302,7 @@ class OrdersTests(unittest.TestCase):
         p.search.clear()
         self.choose(p.table, 27)
         QTest.qWait(30)
-        output = Path(__file__).resolve().parents[1] / "screenshots"
+        output = SCREENSHOTS
         self.assertTrue(w.grab().save(str(output / "orders.png"), "PNG"))
         self.assertTrue(w.grab().save(str(output / "screenshot.png"), "PNG"))
         d = OrderDialog(p.clients, p.cars, p.services, w)

@@ -7,12 +7,21 @@ try {
     $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
     $env:PYINSTALLER_CONFIG_DIR = Join-Path $PSScriptRoot '.tmp\pyinstaller-cache'
     $python = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
-    & $python -c "import struct, sys; sys.exit(0 if sys.platform == 'win32' and struct.calcsize('P') == 8 else 1)"
-    if ($LASTEXITCODE -ne 0) { throw 'Для сборки нужен Python x64 под Windows.' }
+    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
+        throw 'Создайте .venv и установите requirements-build.txt перед сборкой.'
+    }
+    & $python -c "import struct, sys; sys.exit(0 if sys.platform == 'win32' and struct.calcsize('P') == 8 and sys.version_info >= (3, 10) else 1)"
+    if ($LASTEXITCODE -ne 0) { throw 'Для сборки нужен Python 3.10+ x64 под Windows; рекомендуется 3.12.' }
+    & $python -m pip check
+    if ($LASTEXITCODE -ne 0) { throw 'Обнаружен конфликт зависимостей. Проверьте requirements-build.txt.' }
     & $python -m PyInstaller --clean --noconfirm AutoService.spec
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller завершился с ошибкой.' }
 
     $application = Join-Path $PSScriptRoot 'dist\AutoService'
+    if (-not (Test-Path -LiteralPath (Join-Path $application 'AutoService.exe') -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $application '_internal') -PathType Container)) {
+        throw 'Не найдена полная папка приложения PyInstaller.'
+    }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README-Windows.txt') -Destination (Join-Path $application 'README.txt') -Force
     $release = Join-Path $PSScriptRoot 'release'
     New-Item -ItemType Directory -Path $release -Force | Out-Null

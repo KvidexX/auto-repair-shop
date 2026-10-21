@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QMessageBox, QDialog
 from autoservice.data import ORDER_STATUSES
 from autoservice.database import Database
 from autoservice.orders import OrderCard
-from main import MainWindow
+from autoservice.app import MainWindow
 from tests import test_stage6 as helpers
 
 

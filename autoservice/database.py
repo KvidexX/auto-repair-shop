@@ -1,14 +1,16 @@
-"""SQLite-хранилище. Используется справочниками при явной передаче зависимости."""
+"""SQLite API шести разделов, транзакции и безопасная миграция схемы 1 → 2."""
 
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import date, datetime, time
 import os
 from pathlib import Path
 import sqlite3
+from time import monotonic
+from uuid import uuid4
 
 from .data import (
-    CARS, CATEGORIES, CLIENTS, LOCAL_TIMEZONE, SERVICES, advance_order, create_order, edit_order,
-    local_now, make_appointments, make_orders, normalize_plate, normalize_service_name,
+    CATEGORIES, LOCAL_TIMEZONE, advance_order, create_order, edit_order, local_now,
+    normalize_plate, normalize_service_name,
 )
 
 
@@ -161,24 +163,55 @@ def _day(value):
 
 
 class Database:
-    """Синхронный API; записи имеют те же словари и типы, что у прототипа."""
+    """Синхронный API; независимые словари с датами и целыми суммами в рублях."""
 
     def __init__(self, path=None):
         self.path = Path(path) if path is not None else default_database_path()
+        existing = self.path.is_file() and self.path.stat().st_size > 0
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(self.path, isolation_level=None, timeout=5)
         self._connection.row_factory = sqlite3.Row
         self._savepoint = 0
+        self.backup_path = None
         try:
             self._connection.execute("PRAGMA foreign_keys = ON")
             version = self._connection.execute("PRAGMA user_version").fetchone()[0]
             if version not in (0, 1, 2):
                 raise ValueError("Неподдерживаемая версия базы данных.")
             if version < 2:
+                if existing:
+                    self.backup_path = self._backup_before_migration(version)
                 self._connection.executescript("BEGIN IMMEDIATE;\n" + (SCHEMA if version == 0 else "") + MIGRATION_2 + "\nPRAGMA user_version=2;\nCOMMIT;")
         except BaseException:
             self._connection.close()
             raise
+
+    def _backup_before_migration(self, version):
+        """SQLite online backup учитывает WAL; каждый запуск создаёт новый файл."""
+        directory = self.path.parent / "backups"
+        directory.mkdir(exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        target = directory / f"{self.path.stem}-v{version}-{stamp}-{uuid4().hex}.sqlite3"
+        # Резервируем имя без права перезаписи прежних копий.
+        with target.open("xb"):
+            pass
+        deadline = monotonic() + 5
+
+        def progress(status, remaining, total):
+            if monotonic() > deadline:
+                raise sqlite3.OperationalError("Не удалось создать резервную копию: база занята.")
+
+        try:
+            with closing(sqlite3.connect(target)) as backup:
+                self._connection.backup(backup, pages=128, progress=progress, sleep=0.05)
+                if backup.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+                    raise sqlite3.DatabaseError("Проверка резервной копии SQLite не пройдена.")
+                if backup.execute("PRAGMA user_version").fetchone()[0] != version:
+                    raise sqlite3.DatabaseError("Версия базы изменилась во время резервного копирования.")
+        except BaseException:
+            target.unlink(missing_ok=True)
+            raise
+        return target
 
     def __enter__(self):
         return self
@@ -190,14 +223,17 @@ class Database:
         self._connection.close()
 
     @contextmanager
-    def transaction(self):
-        """Методы атомарны сами по себе и поддерживают общую внешнюю транзакцию."""
+    def transaction(self, *, write=True):
+        """Запись резервирует writer; чтение получает согласованный DEFERRED-снимок."""
         nested = self._connection.in_transaction
+        changes_before = self._connection.total_changes
         self._savepoint += 1
         name = f"operation_{self._savepoint}"
-        self._connection.execute(f"SAVEPOINT {name}" if nested else "BEGIN IMMEDIATE")
+        self._connection.execute(f"SAVEPOINT {name}" if nested else "BEGIN IMMEDIATE" if write else "BEGIN")
         try:
             yield self
+            if not nested and (write or self._connection.total_changes != changes_before):
+                self._validate_orders()
             self._connection.execute(f"RELEASE SAVEPOINT {name}" if nested else "COMMIT")
         except BaseException:
             if nested:
@@ -206,6 +242,19 @@ class Database:
             else:
                 self._connection.execute("ROLLBACK")
             raise
+
+    def _validate_orders(self):
+        """Проверяет документ целиком перед COMMIT, включая внешние транзакции API."""
+        invalid = self._connection.execute("""
+            SELECT o.id FROM orders o LEFT JOIN order_items i ON i.order_id=o.id
+            GROUP BY o.id
+            HAVING o.item_count != count(i.id) OR o.total != coalesce(sum(i.price),0)
+                OR min(i.position) != 0 OR max(i.position) != o.item_count-1
+                OR sum(CASE WHEN typeof(i.position) != 'integer' THEN 1 ELSE 0 END) > 0
+            LIMIT 1
+        """).fetchone()
+        if invalid is not None:
+            raise sqlite3.IntegrityError(f"Нарушена целостность состава и суммы заказа {invalid[0]}.")
 
     def _insert(self, table, values):
         # Имена таблиц/полей задаёт только код ниже; пользовательские значения — параметры.
@@ -408,7 +457,7 @@ class Database:
         return self.get_order(order_id)
 
     def get_order(self, order_id):
-        with self.transaction():
+        with self.transaction(write=False):
             record = self._get("orders", order_id)
             record.pop("item_count")
             record["date"] = date.fromisoformat(record["date"])
@@ -429,7 +478,7 @@ class Database:
             parameters.append(car_id)
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         sorting = "completed_at DESC,id DESC" if completed_only else "date DESC,id DESC"
-        with self.transaction():
+        with self.transaction(write=False):
             ids = [row[0] for row in self._connection.execute("SELECT id FROM orders" + where + " ORDER BY " + sorting, parameters)]
             return [self.get_order(order_id) for order_id in ids]
 
@@ -440,24 +489,3 @@ class Database:
                 self._update("orders", order_id, {"status": order["status"],
                              "completed_at": order["completed_at"].isoformat() if order["completed_at"] else None})
         return self.get_order(order_id)
-
-
-def load_demo_data(database):
-    """Явная тестовая загрузка; не вызывается конструктором или интерфейсом."""
-    with database.transaction():
-        if any(database._connection.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() for table in TABLES):
-            return False
-        if database._connection.execute("SELECT 1 FROM sqlite_sequence LIMIT 1").fetchone():
-            return False
-        for client in CLIENTS:
-            database._insert("clients", client)
-        for car in CARS:
-            database._insert("cars", {**car, "plate_key": normalize_plate(car["plate"])})
-        for service in SERVICES:
-            database._insert("services", {**service, "name_key": normalize_service_name(service["name"])})
-        today = local_now().date()
-        for record in make_appointments(today):
-            database._insert("appointments", {**record, "date": record["date"].isoformat(), "time": record["time"].strftime("%H:%M")})
-        for order in make_orders(CLIENTS, CARS, SERVICES, today):
-            database._store_order(order)
-    return True

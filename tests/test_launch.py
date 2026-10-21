@@ -11,6 +11,8 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from tests.support import SCREENSHOTS
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,7 +36,7 @@ def launch_worker(scenario, report_path, arguments):
 
     def database(*args, **kwargs):
         report["database_calls"] += 1
-        if scenario in ("screenshot", "demo"):
+        if scenario.startswith("screenshot") or scenario == "demo":
             raise AssertionError("Скриншоты не должны открывать SQLite")
         assert not args and not kwargs, "Обычный запуск должен использовать Database()"
         db = real_database()
@@ -105,6 +107,16 @@ def launch_worker(scenario, report_path, arguments):
                     d.add_item_button.click()
                     d.save_button.click()
                 modal(order, window.orders_page.add_order)
+                created_order = dict(window.orders_page.selected_order())
+                def edit_order(d):
+                    assert d.reason_input.text() == "Плановое обслуживание"
+                    d.reason_input.setText("Обслуживание: уточнённый состав обращения")
+                    d.save_button.click()
+                modal(edit_order, lambda: window.orders_page.edit_order(created_order["id"]))
+                edited = window.orders_page.selected_order()
+                assert edited["id"] == created_order["id"] and edited["date"] == created_order["date"]
+                assert edited["status"] == created_order["status"]
+                assert edited["reason"] == "Обслуживание: уточнённый состав обращения"
                 def complete(card):
                     for _ in range(3):
                         card.next_button.click()
@@ -137,7 +149,7 @@ def launch_worker(scenario, report_path, arguments):
         windows.append(widget)
         if scenario == "fail-window":
             raise RuntimeError("Тестовая ошибка подготовки окна")
-        if scenario == "screenshot":
+        if scenario.startswith("screenshot"):
             report["demo_counts"] = [len(widget.clients), len(widget.cars), len(widget.orders_page.orders)]
         else:
             QTimer.singleShot(0, lambda: exercise(widget))
@@ -149,6 +161,8 @@ def launch_worker(scenario, report_path, arguments):
             return 0
         return real_message_exec(box)
 
+    if scenario == "screenshot-bare":
+        entry.__file__ = str(Path(report_path).parent / "launcher.py")
     sys.argv = [str(ROOT / "main.py"), *arguments]
     with patch.object(entry, "Database", database), patch.object(entry, "MainWindow", window), \
             patch.object(QMessageBox, "exec", message), patch("autoservice.database.sqlite3.connect", connect):
@@ -198,7 +212,7 @@ class LaunchTests(unittest.TestCase):
         return report
 
     def image_path(self):
-        image = ROOT / "screenshots" / f"{self.folder.name}-{len(self.images)}.png"
+        image = SCREENSHOTS / f"{self.folder.name}-{len(self.images)}.png"
         self.images.append(image)
         return image
 
@@ -287,10 +301,17 @@ class LaunchTests(unittest.TestCase):
                 self.assertEqual(image.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
                 self.assertEqual((self.database_path.read_bytes(), self.database_path.stat().st_mtime_ns), before)
 
+    def test_bare_screenshot_name_uses_launcher_screenshots_directory(self):
+        report = self.run_launch("screenshot-bare", ("--screenshot", "example.png"))
+        image = self.folder / "screenshots" / "example.png"
+        self.assertEqual(image.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(report["database_calls"], 0)
+        self.assertFalse(self.database_path.exists())
+
     def test_actual_cli_screenshot_creates_no_database(self):
         image = self.image_path()
         environment = dict(os.environ, LOCALAPPDATA=str(self.local), QT_QPA_PLATFORM="offscreen")
-        result = subprocess.run([sys.executable, str(ROOT / "main.py"), "--screenshot", image.name, "--screen", "services"],
+        result = subprocess.run([sys.executable, str(ROOT / "main.py"), "--screenshot", str(image), "--screen", "services"],
                                 cwd=self.folder, env=environment, capture_output=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(image.exists())

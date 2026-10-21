@@ -6,14 +6,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMessageBox
 
 
-def save_reference_change(parent, database, operation, collections, *, unique_message=None):
+def save_reference_change(parent, database, operation, collections, *, unique_message=None, read_only=False):
     """Меняет списки на месте только после успешного COMMIT всех операций.
 
     collections — пары (список интерфейса, функция загрузки из БД).
     Ошибка чтения после записи также откатывает транзакцию.
     """
     try:
-        with database.transaction():
+        with database.transaction(write=not read_only):
             result = operation()
             snapshots = [load() for _, load in collections]
     except (sqlite3.Error, ValueError, KeyError) as error:
